@@ -1,0 +1,11 @@
+Packages*
+Release
+InRelease
+*.gpg
+*.kbx*
+*.key
+*.rev
+repo/debian/dists/**/*.deb
+__pycache__
+config.json
+CONNECTION_GUIDE.md
