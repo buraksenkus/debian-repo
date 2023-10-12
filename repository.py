@@ -23,11 +23,14 @@ def do_hash(hash_name, hash_cmd, dist_path):
 
 
 class DebianRepository:
-    def __init__(self, port: int, config: Dict, dir: str, no_watch = True) -> None:
-        self.port = port
+    def __init__(self, config: Dict, dir: str, no_watch = True) -> None:
         self.conf = config
         self.dir = dir
         self.no_watch = no_watch
+    
+    @property
+    def port(self):
+        return int(self.conf["port"])
         
     @property
     def root_dir(self):

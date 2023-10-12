@@ -18,7 +18,6 @@ parser = argparse.ArgumentParser(
 
 parser.add_argument('-c', '--config', required=True, help="Configuration file")
 parser.add_argument('-k', '--keyring', action='store_true', help="just generate GPG key without running server")
-parser.add_argument('-p', '--port', default=8000, help="HTTP server port")
 parser.add_argument('-s', '--service', action='store_true', help="just create and start a Linux service")
 parser.add_argument('-r', '--remove-service', action='store_true', help="just stop and remove Linux service")
 parser.add_argument('--no-watch', default=False, action='store_true', help="watch changes in pool directories")
@@ -28,7 +27,7 @@ args = parser.parse_args()
 with open(args.config) as config_file:
     conf = json.load(config_file)
 
-repository = DebianRepository(port=int(args.port), config=conf, dir=repo_dir, no_watch=args.no_watch)
+repository = DebianRepository(config=conf, dir=repo_dir, no_watch=args.no_watch)
     
 if args.service:
     if args.remove_service:

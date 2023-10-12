@@ -18,7 +18,8 @@
         "short_name": "repo_name",
         "description": "Your repository description",
         "email": "your_email@domain.com",
-        "name": "Your Name"
+        "name": "Your Name",
+        "port": 8645
     }
     ```
 
