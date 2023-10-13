@@ -153,6 +153,7 @@ SignWith: {key_id}
                 pool_path = os.path.join(current_dist, "pool", "stable", arch)
                 packages_path = os.path.join(current_dist, "stable", f"binary-{arch}")
                 os.makedirs(packages_path, exist_ok=True)
+                os.makedirs(pool_path, exist_ok=True)
                 
                 packages_file_path = os.path.join(packages_path, 'Packages')
                 packages_gz_file_path = os.path.join(packages_path, 'Packages.gz')
