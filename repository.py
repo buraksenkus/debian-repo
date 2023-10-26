@@ -45,8 +45,12 @@ class DebianRepository:
         return os.path.join(self.root_dir, "keyring")
     
     @property
+    def debian_dir(self):
+        return os.path.join(self.dir, "debian")
+    
+    @property
     def dists_dir(self):
-        return os.path.join(self.dir, "debian/dists")
+        return os.path.join(self.debian_dir, "dists")
     
     @property
     def gpg_key_ok(self):
@@ -147,6 +151,8 @@ SignWith: {key_id}
 
         key_id = out.decode("utf-8").strip()
         
+        os.chdir(self.debian_dir)
+
         for dist in os.listdir(self.dists_dir):
             for arch in self.conf["architectures"]:
                 current_dist = os.path.join(self.dists_dir, dist)
@@ -158,8 +164,13 @@ SignWith: {key_id}
                 packages_file_path = os.path.join(packages_path, 'Packages')
                 packages_gz_file_path = os.path.join(packages_path, 'Packages.gz')
                 
-                out, err, rc = execute_cmd(f"dpkg-scanpackages -m --arch {arch} {pool_path} > {packages_file_path}", env={'GNUPGHOME': self.keyring_dir})
+                out, err, rc = execute_cmd(f"dpkg-scanpackages -m --arch {arch} {os.path.relpath(pool_path, self.debian_dir)} > {packages_file_path}", env={'GNUPGHOME': self.keyring_dir})
+                if rc != 0:
+                    print(f"Error while scanning packages: {err.decode('utf-8')}")
+
                 out, err, rc = execute_cmd(f"gzip -9 -c {packages_file_path} > {packages_gz_file_path}", env={'GNUPGHOME': self.keyring_dir})
+                if rc != 0:
+                    print(f"Error while zipping package info: {err.decode('utf-8')}")
 
             release_file_path = os.path.join(current_dist, "Release")
             with open(release_file_path, "w") as f:
@@ -167,6 +178,7 @@ SignWith: {key_id}
                 
             out, err, rc = execute_cmd(f"gpg -abs -u {key_id} --yes -o {os.path.join(current_dist, 'Release.gpg')} {release_file_path}", env={'GNUPGHOME': self.keyring_dir})
             out, err, rc = execute_cmd(f"gpg --clearsign -u {key_id} --yes -o {os.path.join(current_dist, 'InRelease')} {release_file_path}", env={'GNUPGHOME': self.keyring_dir})
+        os.chdir(self.dir)
         print("Repository updated.")
     
     def watch_pools(self):
