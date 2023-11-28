@@ -19,9 +19,17 @@
         "description": "Your repository description",
         "email": "your_email@domain.com",
         "name": "Your Name",
-        "port": 8645
+        "port": 8645,
+        "auth": "basic",
+        "users": {
+            "username1": "password1",
+            "username2": "password2",
+        }
     }
     ```
+
+    Available options:
+    * **auth**: *basic, none*
 
 * Run repository script by specifying configuration file.
 

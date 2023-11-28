@@ -1,13 +1,59 @@
+import base64
 import os
-import socketserver
 import subprocess
 from common import execute_cmd
 from datetime import datetime
-from http.server import SimpleHTTPRequestHandler
+from http.server import SimpleHTTPRequestHandler, HTTPServer
+from socketserver import ThreadingMixIn
 from threading import Event, Thread
 from typing import Dict
 
 stop_threads = Event()
+
+
+class AuthHandler(SimpleHTTPRequestHandler):    
+    def __init__(self, *args, auth="basic", users=None, **kwargs):
+        self.auth = auth
+        self.users = users
+        super().__init__(*args, **kwargs)
+
+    def __check_credentials__(self, credentials: str):
+        username, password = credentials.split(':')
+        return username in self.users and self.users[username] == password
+
+    def do_GET(self):
+        if not self.auth.lower() == "basic":
+            super().do_GET()
+            return
+        
+        # Extract the authorization header
+        auth_header = self.headers.get('Authorization')
+
+        # Check if the header is present and starts with 'Basic'
+        if auth_header and auth_header.startswith('Basic '):
+            # Decode the base64-encoded credentials
+            credentials = base64.b64decode(auth_header.split(' ')[1]).decode('utf-8')
+
+            # Check if the credentials match the expected username and password
+            if self.__check_credentials__(credentials):
+                # If authentication is successful, serve the requested file
+                super().do_GET()
+            else:
+                # If authentication fails, return a 401 Unauthorized response
+                self.send_response(401)
+                self.send_header('WWW-Authenticate', 'Basic realm=\"Restricted\"')
+                self.end_headers()
+                self.wfile.write(b'401 Unauthorized - Invalid credentials')
+        else:
+            # If no authorization header is present, return a 401 Unauthorized response
+            self.send_response(401)
+            self.send_header('WWW-Authenticate', 'Basic realm=\"Restricted\"')
+            self.end_headers()
+            self.wfile.write(b'401 Unauthorized - Authentication required')
+
+
+class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+    pass
 
 
 def do_hash(hash_name, hash_cmd, dist_path):
@@ -94,24 +140,25 @@ SignWith: {key_id}
         self.__generate_connection_guide__()
         self.update()
 
-        with socketserver.TCPServer(("", self.port), SimpleHTTPRequestHandler) as httpd:
-            print(f"Serving directory '{self.dir}' on port {self.port} ...")
-            try:
-                if not self.no_watch:
-                    watch_thread = Thread(target=self.watch_pools)
-                    watch_thread.start()
-            
-                httpd.serve_forever()
-            except KeyboardInterrupt:
-                print(f"Requested termination.")
-                stop_threads.set()
-                httpd.shutdown()
-                httpd.server_close()
-            except Exception as e:
-                print(f"Error: {e}")
-                stop_threads.set()
-                httpd.shutdown()
-                httpd.server_close()
+        server_address = ('', self.port)
+        httpd = ThreadedHTTPServer(server_address, lambda *args, **kwargs: AuthHandler(*args, auth=self.conf["auth"], users=self.conf["users"], **kwargs))
+        print(f"Serving directory '{self.dir}' on port {self.port} ...")
+        try:
+            if not self.no_watch:
+                watch_thread = Thread(target=self.watch_pools)
+                watch_thread.start()
+        
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            print(f"Requested termination.")
+            stop_threads.set()
+            httpd.shutdown()
+            httpd.server_close()
+        except Exception as e:
+            print(f"Error: {e}")
+            stop_threads.set()
+            httpd.shutdown()
+            httpd.server_close()
                 
     def generate_gpg(self):
         '''Generates GPS key for signing repository.'''
@@ -251,6 +298,13 @@ WantedBy=multi-user.target
         
     def __generate_connection_guide__(self):
         guide_file_path = os.path.join(self.root_dir, "CONNECTION_GUIDE.md")
+        credentials = ""
+        credential_vars = ""
+        auth_conf_line = ""
+        if "auth" in self.conf and self.conf["auth"].lower() == "basic":
+            credentials = "$APT_USERNAME:$APT_PASSWORD@"
+            credential_vars = "export APT_USERNAME=username\nexport APT_PASSWORD=password\n"
+            auth_conf_line = f"\necho \"machine http://$APT_SERVER_IP:{self.port} login $APT_USERNAME password $APT_PASSWORD\" | sudo tee /etc/apt/auth.conf.d/{self.conf['short_name']}.conf\n"
         guide_content = f"""## Using Debian Repository
 
 Available options:
@@ -262,13 +316,13 @@ Available options:
 export APT_SERVER_IP="1.1.1.1"
 export APT_DIST=jammy
 export APT_ARCH=amd64
-
+{credential_vars}
 # Fetch GPG signature
-wget -qO- http://$APT_SERVER_IP:{self.port}/publickey.gpg | gpg --dearmor | sudo tee /usr/share/keyrings/{self.conf['short_name']}.gpg >/dev/null
+wget -qO- http://{credentials}$APT_SERVER_IP:{self.port}/publickey.gpg | gpg --dearmor | sudo tee /usr/share/keyrings/{self.conf['short_name']}.gpg >/dev/null
 
 # Fetch repository info
 echo "deb [arch=$APT_ARCH, signed-by=/usr/share/keyrings/{self.conf['short_name']}.gpg] http://$APT_SERVER_IP:{self.port}/debian $APT_DIST stable" | sudo tee /etc/apt/sources.list.d/{self.conf['short_name']}.list
-
+{auth_conf_line}
 # Update sources
 sudo apt update
 ```
