@@ -1,5 +1,5 @@
-import os
 from datetime import datetime
+from logger import log
 from threading import Event, Timer
 from typing import List
 
@@ -25,7 +25,7 @@ class Watcher:
             # Add a recursive watch
             wm.add_watch(watch_dir, pyinotify.ALL_EVENTS, rec=True)
 
-            print(f"Watching directory: {watch_dir}")
+            log(f"Watching directory: {watch_dir}")
             
         while not self.stop_event.is_set():
             try:
@@ -67,26 +67,26 @@ class EventHandler(pyinotify.ProcessEvent):
         pass
 
     def process_IN_CREATE(self, event):
-        print(f"CREATE: {event.pathname}")
+        log(f"CREATE: {event.pathname}")
         try_to_update_repo(self.onupdate)
 
     def process_IN_DELETE(self, event):
-        print(f"DELETE: {event.pathname}")
+        log(f"DELETE: {event.pathname}")
         try_to_update_repo(self.onupdate)
 
     def process_IN_MODIFY(self, event):
-        print(f"MODIFY: {event.pathname}")
+        log(f"MODIFY: {event.pathname}")
         try_to_update_repo(self.onupdate)
 
     def process_IN_OPEN(self, event):
         pass
     
     def process_IN_MOVED_FROM(self, event):
-        print(f"MOVED_FROM: {event.pathname}")
+        log(f"MOVED_FROM: {event.pathname}")
         try_to_update_repo(self.onupdate)
     
     def process_IN_MOVED_TO(self, event):
-        print(f"MOVED_TO: {event.pathname}")
+        log(f"MOVED_TO: {event.pathname}")
         try_to_update_repo(self.onupdate)
     
     def process_default(self, event):

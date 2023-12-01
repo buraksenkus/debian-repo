@@ -2,6 +2,7 @@ import base64
 import os
 import subprocess
 from common import execute_cmd
+from logger import log
 from datetime import datetime
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
@@ -142,7 +143,7 @@ SignWith: {key_id}
 
         server_address = ('', self.port)
         httpd = ThreadedHTTPServer(server_address, lambda *args, **kwargs: AuthHandler(*args, auth=self.conf["auth"], users=self.conf["users"], **kwargs))
-        print(f"Serving directory '{self.dir}' on port {self.port} ...")
+        log(f"Serving directory '{self.dir}' on port {self.port} ...")
         try:
             if not self.no_watch:
                 watch_thread = Thread(target=self.watch_pools)
@@ -150,12 +151,12 @@ SignWith: {key_id}
         
             httpd.serve_forever()
         except KeyboardInterrupt:
-            print(f"Requested termination.")
+            log(f"Requested termination.")
             stop_threads.set()
             httpd.shutdown()
             httpd.server_close()
         except Exception as e:
-            print(f"Error: {e}")
+            log(f"Error: {e}")
             stop_threads.set()
             httpd.shutdown()
             httpd.server_close()
@@ -165,7 +166,7 @@ SignWith: {key_id}
         os.makedirs(self.dir, exist_ok=True)
 
         if not self.gpg_key_ok:
-            print("Generating GPG key...")
+            log("Generating GPG key...")
             os.makedirs(self.keyring_dir, mode=0o700, exist_ok=True)
 
             cmd_input = "\n".join([
@@ -188,7 +189,7 @@ SignWith: {key_id}
                 raise Exception("Couldn't generate GPG key!")
 
         else:
-            print(f"Already exists. If you want to create a new key, run 'rm -r {self.keyring_dir}'")
+            log(f"Already exists. If you want to create a new key, run 'rm -r {self.keyring_dir}'")
             
     def update(self):
         if not self.gpg_key_ok:
@@ -213,11 +214,11 @@ SignWith: {key_id}
                 
                 out, err, rc = execute_cmd(f"dpkg-scanpackages -m --arch {arch} {os.path.relpath(pool_path, self.debian_dir)} > {packages_file_path}", env={'GNUPGHOME': self.keyring_dir})
                 if rc != 0:
-                    print(f"Error while scanning packages: {err.decode('utf-8')}")
+                    log(f"Error while scanning packages: {err.decode('utf-8')}")
 
                 out, err, rc = execute_cmd(f"gzip -9 -c {packages_file_path} > {packages_gz_file_path}", env={'GNUPGHOME': self.keyring_dir})
                 if rc != 0:
-                    print(f"Error while zipping package info: {err.decode('utf-8')}")
+                    log(f"Error while zipping package info: {err.decode('utf-8')}")
 
             release_file_path = os.path.join(current_dist, "Release")
             with open(release_file_path, "w") as f:
@@ -226,7 +227,7 @@ SignWith: {key_id}
             out, err, rc = execute_cmd(f"gpg -abs -u {key_id} --yes -o {os.path.join(current_dist, 'Release.gpg')} {release_file_path}", env={'GNUPGHOME': self.keyring_dir})
             out, err, rc = execute_cmd(f"gpg --clearsign -u {key_id} --yes -o {os.path.join(current_dist, 'InRelease')} {release_file_path}", env={'GNUPGHOME': self.keyring_dir})
         os.chdir(self.dir)
-        print("Repository updated.")
+        log("Repository updated.")
     
     def watch_pools(self):
         '''Watch package pool directories for any event (file create, delete, modify, move). Calls EventHandler's functions in case of events.'''
@@ -241,7 +242,7 @@ SignWith: {key_id}
         watcher.start()
         
     def create_service(self, config_path):
-        print("Creating systemd service...")
+        log("Creating systemd service...")
         service_file_path = f"/etc/systemd/system/{self.conf['short_name']}.service"
         service_file_content = f"""[Unit]
 Description={self.conf['description']}
@@ -259,42 +260,42 @@ WantedBy=multi-user.target
             
         out, err, rc = execute_cmd("systemctl daemon-reload")
         if rc != 0:
-            print(f"Error while reloading systemctl services: {err.decode('utf-8')}")
+            log(f"Error while reloading systemctl services: {err.decode('utf-8')}")
             
         out, err, rc = execute_cmd(f"systemctl enable {self.conf['short_name']}.service")
         if rc != 0:
-            print(f"Error while enabling {self.conf['short_name']}.service: {err.decode('utf-8')}")
+            log(f"Error while enabling {self.conf['short_name']}.service: {err.decode('utf-8')}")
             
         out, err, rc = execute_cmd(f"systemctl start {self.conf['short_name']}.service")
         if rc != 0:
-            print(f"Error while starting {self.conf['short_name']}.service: {err.decode('utf-8')}")
+            log(f"Error while starting {self.conf['short_name']}.service: {err.decode('utf-8')}")
 
-        print("Done.")
+        log("Done.")
         
     def remove_service(self, config_path):
         service_file_path = f"/etc/systemd/system/{self.conf['short_name']}.service"
         
         if not os.path.exists(service_file_path):
-            print(f"Service doesn't exist: {service_file_path}")
+            log(f"Service doesn't exist: {service_file_path}")
             return
         
-        print("Removing systemd service...")
+        log("Removing systemd service...")
             
         out, err, rc = execute_cmd(f"systemctl stop {self.conf['short_name']}.service")
         if rc != 0:
-            print(f"Error while starting {self.conf['short_name']}.service: {err.decode('utf-8')}")
+            log(f"Error while starting {self.conf['short_name']}.service: {err.decode('utf-8')}")
             
         out, err, rc = execute_cmd(f"systemctl disable {self.conf['short_name']}.service")
         if rc != 0:
-            print(f"Error while enabling {self.conf['short_name']}.service: {err.decode('utf-8')}")
+            log(f"Error while enabling {self.conf['short_name']}.service: {err.decode('utf-8')}")
             
         out, err, rc = execute_cmd("systemctl daemon-reload")
         if rc != 0:
-            print(f"Error while reloading systemctl services: {err.decode('utf-8')}")
+            log(f"Error while reloading systemctl services: {err.decode('utf-8')}")
             
         os.remove(service_file_path)
 
-        print("Done.")
+        log("Done.")
         
     def __generate_connection_guide__(self):
         guide_file_path = os.path.join(self.root_dir, "CONNECTION_GUIDE.md")
@@ -331,4 +332,4 @@ sudo apt update
         with open(guide_file_path, "w") as f:
             f.write(guide_content)
         
-        print(f"Connection guide created in {guide_file_path}")
+        log(f"Connection guide created in {guide_file_path}")

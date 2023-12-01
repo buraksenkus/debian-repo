@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+from logger import log
 from repository import DebianRepository
 
 if not os.path.exists("/usr/bin/dpkg-scanpackages"):
@@ -31,7 +32,7 @@ repository = DebianRepository(config=conf, dir=repo_dir, no_watch=args.no_watch)
     
 if args.service:
     if args.remove_service:
-        print("Don't use --remove-service and --service flags at the same time!")
+        log("Don't use --remove-service and --service flags at the same time!")
         exit(1)
     repository.create_service(args.config)
     exit(0)
