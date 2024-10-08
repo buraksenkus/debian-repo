@@ -9,3 +9,4 @@ repo/debian/dists/**/*.deb
 __pycache__
 config.json
 CONNECTION_GUIDE.md
+.idea
