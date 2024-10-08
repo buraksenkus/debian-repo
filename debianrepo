@@ -3,8 +3,8 @@
 import argparse
 import json
 import os
-from logger import log
-from repository import DebianRepository
+from debian_repo.logger import log
+from debian_repo.repository import DebianRepository
 
 if not os.path.exists("/usr/bin/dpkg-scanpackages"):
     raise Exception("Please install dpkg-dev package.")
@@ -18,17 +18,17 @@ parser = argparse.ArgumentParser(
                     description='Debian repository controller')
 
 parser.add_argument('-c', '--config', required=True, help="Configuration file")
-parser.add_argument('-k', '--keyring', action='store_true', help="just generate GPG key without running server")
-parser.add_argument('-s', '--service', action='store_true', help="just create and start a Linux service")
-parser.add_argument('-r', '--remove-service', action='store_true', help="just stop and remove Linux service")
-parser.add_argument('--no-watch', default=False, action='store_true', help="watch changes in pool directories")
+parser.add_argument('-k', '--keyring', action='store_true', help="Just generate GPG key without running server")
+parser.add_argument('-s', '--service', action='store_true', help="Just create and start a Linux service")
+parser.add_argument('-r', '--remove-service', action='store_true', help="Just stop and remove Linux service")
+parser.add_argument('--no-watch', default=False, action='store_true', help="Don't watch changes in pool directories")
 
 args = parser.parse_args()
 
 with open(args.config) as config_file:
     conf = json.load(config_file)
 
-repository = DebianRepository(config=conf, dir=repo_dir, no_watch=args.no_watch)
+repository = DebianRepository(config=conf, repo_dir=repo_dir, no_watch=args.no_watch)
     
 if args.service:
     if args.remove_service:
@@ -38,7 +38,7 @@ if args.service:
     exit(0)
     
 if args.remove_service:
-    repository.remove_service(args.config)
+    repository.remove_service()
     exit(0)
     
 if args.keyring:

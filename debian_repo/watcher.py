@@ -1,12 +1,12 @@
+from .logger import log
+
+import pyinotify
 from datetime import datetime
-from logger import log
 from threading import Event, Timer
 from typing import List
 
-import pyinotify
-
 last_update = datetime.now()
-UPDATE_DIFF_IN_SEC = 2
+UPDATE_DIFF_IN_SEC = 1
 
 class Watcher:
     def __init__(self, stop_event: Event, onupdate, directories: List[str]) -> None:
