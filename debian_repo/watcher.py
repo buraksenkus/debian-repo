@@ -6,7 +6,7 @@ from threading import Event, Timer
 from typing import List
 
 last_update = datetime.now()
-UPDATE_DIFF_IN_SEC = 2
+UPDATE_DIFF_IN_SEC = 1
 
 class Watcher:
     def __init__(self, stop_event: Event, onupdate, directories: List[str]) -> None:
