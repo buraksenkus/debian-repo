@@ -225,7 +225,7 @@ Description={self.conf['description']}
 
 [Service]
 WorkingDirectory={self.root_dir}
-ExecStart=python3 debianrepo.py -c {os.path.realpath(config_path)}
+ExecStart=python3 debianrepo -c {os.path.realpath(config_path)}
 
 [Install]
 WantedBy=multi-user.target
