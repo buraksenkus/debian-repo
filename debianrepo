@@ -28,7 +28,7 @@ args = parser.parse_args()
 with open(args.config) as config_file:
     conf = json.load(config_file)
 
-repository = DebianRepository(config=conf, dir=repo_dir, no_watch=args.no_watch)
+repository = DebianRepository(config=conf, repo_dir=repo_dir, no_watch=args.no_watch)
     
 if args.service:
     if args.remove_service:

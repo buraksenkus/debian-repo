@@ -12,9 +12,9 @@ stop_threads = Event()
 
 
 class DebianRepository:
-    def __init__(self, config: Dict, dir: str, no_watch = True) -> None:
+    def __init__(self, config: Dict, repo_dir: str, no_watch = True) -> None:
         self.conf = config
-        self.dir = dir
+        self.dir = repo_dir
         self.no_watch = no_watch
     
     @property
