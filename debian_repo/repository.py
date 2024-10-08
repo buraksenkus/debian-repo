@@ -1,8 +1,9 @@
+from .common import execute_cmd
+from .logger import log
+
 import base64
 import os
 import subprocess
-from common import execute_cmd
-from logger import log
 from datetime import datetime
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
@@ -101,7 +102,7 @@ class DebianRepository:
     
     @property
     def gpg_key_ok(self):
-        '''Checks if GPG key exists.'''
+        """Checks if GPG key exists."""
         if os.path.exists(self.keyring_dir):
             keys = execute_cmd(f'gpg --list-keys', env={'GNUPGHOME': self.keyring_dir})[0].decode('utf-8')
             return self.conf["email"] in keys
@@ -131,7 +132,7 @@ SignWith: {key_id}
 {sha256sums}"""
         
     def start(self):
-        '''Starts HTTP server and package pool watching. Generates GPG key automatically if it doesn't exist.'''
+        """Starts HTTP server and package pool watching. Generates GPG key automatically if it doesn't exist."""
         self.create_pool_directories()
         os.chdir(self.dir)
         
@@ -162,7 +163,7 @@ SignWith: {key_id}
             httpd.server_close()
                 
     def generate_gpg(self):
-        '''Generates GPS key for signing repository.'''
+        """Generates GPS key for signing repository."""
         os.makedirs(self.dir, exist_ok=True)
 
         if not self.gpg_key_ok:
@@ -230,8 +231,8 @@ SignWith: {key_id}
         log("Repository updated.")
     
     def watch_pools(self):
-        '''Watch package pool directories for any event (file create, delete, modify, move). Calls EventHandler's functions in case of events.'''
-        from watcher import Watcher
+        """Watch package pool directories for any event (file create, delete, modify, move). Calls EventHandler's functions in case of events."""
+        from .watcher import Watcher
         
         pool_paths = []
         for dist in self.dists:
@@ -272,7 +273,7 @@ WantedBy=multi-user.target
 
         log("Done.")
         
-    def remove_service(self, config_path):
+    def remove_service(self):
         service_file_path = f"/etc/systemd/system/{self.conf['short_name']}.service"
         
         if not os.path.exists(service_file_path):

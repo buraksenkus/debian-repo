@@ -1,9 +1,9 @@
-from datetime import datetime
-from logger import log
-from threading import Event, Timer
-from typing import List
+from .logger import log
 
 import pyinotify
+from datetime import datetime
+from threading import Event, Timer
+from typing import List
 
 last_update = datetime.now()
 UPDATE_DIFF_IN_SEC = 2
