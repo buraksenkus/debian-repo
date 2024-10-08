@@ -1,9 +1,9 @@
 from .common import execute_cmd
 from .logger import log
+from .ops import do_hash
 
 import base64
 import os
-import subprocess
 from datetime import datetime
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
@@ -56,18 +56,6 @@ class AuthHandler(SimpleHTTPRequestHandler):
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     pass
-
-
-def do_hash(hash_name, hash_cmd, dist_path):
-    hashes = []
-    for root, _, files in os.walk(dist_path):
-        for f in files:
-            filepath = os.path.join(root, f)
-            if f != "Release":
-                filehash = subprocess.getoutput(f"{hash_cmd} {filepath}").split()[0]
-                filesize = os.path.getsize(filepath)
-                hashes.append(f" {filehash} {filesize} {os.path.relpath(filepath, dist_path)}")
-    return "\n".join([f"{hash_name}:"] + hashes)
 
 
 class DebianRepository:
