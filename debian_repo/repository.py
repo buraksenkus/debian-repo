@@ -185,16 +185,16 @@ SignWith: {key_id}
                         if rc != 0:
                             log(f"Error while zipping package info: {err.decode('utf-8')}")
 
-                release_file_path = os.path.join(current_dist, "Release")
-                with open(release_file_path, "w") as f:
-                    f.write(self.__generate_release__(dist, key_id))
+                        release_file_path = os.path.join(current_dist, "Release")
+                        with open(release_file_path, "w") as f:
+                            f.write(self.__generate_release__(dist, key_id))
 
-                    out, err, rc = execute_cmd(
-                        f"gpg -abs -u {key_id} --yes -o {os.path.join(current_dist, 'Release.gpg')} {release_file_path}",
-                        env={'GNUPGHOME': self.keyring_dir})
-                    out, err, rc = execute_cmd(
-                        f"gpg --clearsign -u {key_id} --yes -o {os.path.join(current_dist, 'InRelease')} {release_file_path}",
-                        env={'GNUPGHOME': self.keyring_dir})
+                            out, err, rc = execute_cmd(
+                                f"gpg -abs -u {key_id} --yes -o {os.path.join(current_dist, 'Release.gpg')} {release_file_path}",
+                                env={'GNUPGHOME': self.keyring_dir})
+                            out, err, rc = execute_cmd(
+                                f"gpg --clearsign -u {key_id} --yes -o {os.path.join(current_dist, 'InRelease')} {release_file_path}",
+                                env={'GNUPGHOME': self.keyring_dir})
                 os.chdir(self.dir)
                 log("Repository updated.")
             except Exception as e:
