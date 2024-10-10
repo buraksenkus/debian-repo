@@ -4,20 +4,20 @@ from .logger import log
 from os import path
 
 
-def generate_release_gpg_file(key_id: str, keyring_dir: str, dist_dir: str, release_file_path: str):
+def generate_release_gpg_file(key_id: str, keyring_dir: str, out_path: str, release_file_path: str):
     out, err, rc = execute_cmd(
-        f"gpg -abs -u {key_id} --yes -o {path.join(dist_dir, 'Release.gpg')} {release_file_path}",
+        f"gpg -abs -u {key_id} --yes -o {out_path} {release_file_path}",
         env={'GNUPGHOME': keyring_dir})
     if rc != 0:
-        log(f"Error while generating Release.gpg in {dist_dir}: {err.decode('utf-8')}")
+        log(f"Error while generating {out_path}: {err.decode('utf-8')}")
 
 
-def generate_inrelease_file(key_id: str, keyring_dir: str, dist_dir: str, release_file_path: str):
+def generate_inrelease_file(key_id: str, keyring_dir: str, out_path: str, release_file_path: str):
     out, err, rc = execute_cmd(
-        f"gpg --clearsign -u {key_id} --yes -o {path.join(dist_dir, 'InRelease')} {release_file_path}",
+        f"gpg --clearsign -u {key_id} --yes -o {out_path} {release_file_path}",
         env={'GNUPGHOME': keyring_dir})
     if rc != 0:
-        log(f"Error while generating InRelease in {dist_dir}: {err.decode('utf-8')}")
+        log(f"Error while generating {out_path}: {err.decode('utf-8')}")
 
 
 def generate_packages_file(keyring_dir: str, pool_dir: str, packages_folder: str, arch: str):

@@ -37,7 +37,7 @@ class Watcher:
         notifier.stop()
 
 
-def try_to_update_repo(onupdate):
+def try_to_update_repo(onupdate, pathname: str):
     global last_update, UPDATE_DIFF_IN_SEC
     now = datetime.now()
 
@@ -45,7 +45,10 @@ def try_to_update_repo(onupdate):
     
     if time_diff >= UPDATE_DIFF_IN_SEC:
         last_update = now
-        t = Timer(0.5, onupdate)
+        start_index = pathname.find("dists/") + 6
+        end_index = pathname.find("/pool")
+        dist_name = pathname[start_index:end_index]
+        t = Timer(0.5, onupdate, [dist_name])
         t.start()
 
 
@@ -68,26 +71,26 @@ class EventHandler(pyinotify.ProcessEvent):
 
     def process_IN_CREATE(self, event):
         log(f"CREATE: {event.pathname}")
-        try_to_update_repo(self.onupdate)
+        try_to_update_repo(self.onupdate, event.pathname)
 
     def process_IN_DELETE(self, event):
         log(f"DELETE: {event.pathname}")
-        try_to_update_repo(self.onupdate)
+        try_to_update_repo(self.onupdate, event.pathname)
 
     def process_IN_MODIFY(self, event):
         log(f"MODIFY: {event.pathname}")
-        try_to_update_repo(self.onupdate)
+        try_to_update_repo(self.onupdate, event.pathname)
 
     def process_IN_OPEN(self, event):
         pass
-    
+
     def process_IN_MOVED_FROM(self, event):
         log(f"MOVED_FROM: {event.pathname}")
-        try_to_update_repo(self.onupdate)
-    
+        try_to_update_repo(self.onupdate, event.pathname)
+
     def process_IN_MOVED_TO(self, event):
         log(f"MOVED_TO: {event.pathname}")
-        try_to_update_repo(self.onupdate)
-    
+        try_to_update_repo(self.onupdate, event.pathname)
+
     def process_default(self, event):
         pass
