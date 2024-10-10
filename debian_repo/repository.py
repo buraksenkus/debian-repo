@@ -1,4 +1,6 @@
 from .common import execute_cmd
+from .helpers import generate_release_gpg_file, generate_inrelease_file, generate_packages_gz_file, \
+    generate_packages_file, get_gpg_key_id
 from .logger import log
 from .ops import do_hash
 from .server import ThreadedHTTPServer, AuthHandler
@@ -57,7 +59,7 @@ class DebianRepository:
             dist_pool_path = os.path.join(self.dists_dir, dist, "pool")
             os.makedirs(dist_pool_path, exist_ok=True)
 
-    def __generate_release__(self, dist, key_id):
+    def __generate_release_content__(self, dist, key_id):
         date = datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S +0000")
         md5sums = do_hash("MD5Sum", "md5sum", os.path.join(self.dists_dir, dist))
         sha1sums = do_hash("SHA1", "sha1sum", os.path.join(self.dists_dir, dist))
@@ -142,6 +144,27 @@ SignWith: {key_id}
         else:
             log(f"Already exists. If you want to create a new key, run 'rm -r {self.keyring_dir}'")
 
+    def generate_release_files(self, dist: str, key_id: str):
+        current_dist_dir = os.path.join(self.dists_dir, dist)
+        release_file_path = os.path.join(current_dist_dir, "Release")
+        with open(release_file_path, "w") as f:
+            f.write(self.__generate_release_content__(dist, key_id))
+
+        generate_release_gpg_file(key_id, self.keyring_dir, current_dist_dir, release_file_path)
+        generate_inrelease_file(key_id, self.keyring_dir, current_dist_dir, release_file_path)
+
+    def update_packages_of_dist(self, dist: str):
+        for arch in self.conf["architectures"]:
+            current_dist = os.path.join(self.dists_dir, dist)
+            pool_path = os.path.join(current_dist, "pool", "stable", arch)
+            packages_path = os.path.join(current_dist, "stable", f"binary-{arch}")
+            os.makedirs(packages_path, exist_ok=True)
+            os.makedirs(pool_path, exist_ok=True)
+
+            generate_packages_file(self.keyring_dir, os.path.relpath(pool_path, self.debian_dir), packages_path, arch)
+
+            generate_packages_gz_file(self.keyring_dir, packages_path)
+
     def update(self):
         with self.update_wait_mutex:
             if self.queued_update_requests >= 2:
@@ -156,45 +179,14 @@ SignWith: {key_id}
                 if not self.gpg_key_ok:
                     self.generate_gpg()
 
-                out, err, rc = execute_cmd(f"gpg --list-keys --with-colons | grep '^pub' | cut -d: -f5",
-                                           env={'GNUPGHOME': self.keyring_dir})
-
-                key_id = out.decode("utf-8").strip()
+                key_id = get_gpg_key_id(self.keyring_dir)
 
                 os.chdir(self.debian_dir)
 
                 for dist in os.listdir(self.dists_dir):
-                    for arch in self.conf["architectures"]:
-                        current_dist = os.path.join(self.dists_dir, dist)
-                        pool_path = os.path.join(current_dist, "pool", "stable", arch)
-                        packages_path = os.path.join(current_dist, "stable", f"binary-{arch}")
-                        os.makedirs(packages_path, exist_ok=True)
-                        os.makedirs(pool_path, exist_ok=True)
+                    self.update_packages_of_dist(dist)
+                    self.generate_release_files(dist, key_id)
 
-                        packages_file_path = os.path.join(packages_path, 'Packages')
-                        packages_gz_file_path = os.path.join(packages_path, 'Packages.gz')
-
-                        out, err, rc = execute_cmd(
-                            f"dpkg-scanpackages -m --arch {arch} {os.path.relpath(pool_path, self.debian_dir)} > {packages_file_path}",
-                            env={'GNUPGHOME': self.keyring_dir})
-                        if rc != 0:
-                            log(f"Error while scanning packages: {err.decode('utf-8')}")
-
-                        out, err, rc = execute_cmd(f"gzip -9 -c {packages_file_path} > {packages_gz_file_path}",
-                                                   env={'GNUPGHOME': self.keyring_dir})
-                        if rc != 0:
-                            log(f"Error while zipping package info: {err.decode('utf-8')}")
-
-                        release_file_path = os.path.join(current_dist, "Release")
-                        with open(release_file_path, "w") as f:
-                            f.write(self.__generate_release__(dist, key_id))
-
-                            out, err, rc = execute_cmd(
-                                f"gpg -abs -u {key_id} --yes -o {os.path.join(current_dist, 'Release.gpg')} {release_file_path}",
-                                env={'GNUPGHOME': self.keyring_dir})
-                            out, err, rc = execute_cmd(
-                                f"gpg --clearsign -u {key_id} --yes -o {os.path.join(current_dist, 'InRelease')} {release_file_path}",
-                                env={'GNUPGHOME': self.keyring_dir})
                 os.chdir(self.dir)
                 log("Repository updated.")
             except Exception as e:
