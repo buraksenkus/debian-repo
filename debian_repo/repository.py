@@ -1,11 +1,10 @@
 from .common import execute_cmd
+from .distribution import Distribution
 from .logger import log
-from .ops import do_hash
 from .server import ThreadedHTTPServer, AuthHandler
 
 import os
-from datetime import datetime
-from threading import Event, Thread, Lock
+from threading import Event, Thread
 from typing import Dict
 
 stop_threads = Event()
@@ -15,10 +14,12 @@ class DebianRepository:
     def __init__(self, config: Dict, repo_dir: str, no_watch=True) -> None:
         self.conf = config
         self.dir = repo_dir
+        self.dists: Dict[str, Distribution] = {}
+        for dist_name in config["dists"]:
+            dist_dir = os.path.join(self.dists_dir, dist_name)
+            self.dists[dist_name] = Distribution(dist_name, dist_dir, config["architectures"], self.keyring_dir,
+                                                 self.debian_dir, config["description"])
         self.no_watch = no_watch
-        self.update_mutex = Lock()
-        self.update_wait_mutex = Lock()
-        self.queued_update_requests = 0
 
     @property
     def port(self):
@@ -27,10 +28,6 @@ class DebianRepository:
     @property
     def root_dir(self):
         return os.path.dirname(self.dir)
-
-    @property
-    def dists(self):
-        return self.conf["dists"]
 
     @property
     def keyring_dir(self):
@@ -53,27 +50,8 @@ class DebianRepository:
         return False
 
     def create_pool_directories(self):
-        for dist in self.dists:
-            dist_pool_path = os.path.join(self.dists_dir, dist, "pool")
-            os.makedirs(dist_pool_path, exist_ok=True)
-
-    def __generate_release__(self, dist, key_id):
-        date = datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S +0000")
-        md5sums = do_hash("MD5Sum", "md5sum", os.path.join(self.dists_dir, dist))
-        sha1sums = do_hash("SHA1", "sha1sum", os.path.join(self.dists_dir, dist))
-        sha256sums = do_hash("SHA256", "sha256sum", os.path.join(self.dists_dir, dist))
-        return f"""Origin: {self.conf['description']}
-Suite: {dist}
-Codename: {dist}
-Version: 1.0
-Architectures: {" ".join(self.conf["architectures"])}
-Components: stable
-Description: {self.conf['description']}
-Date: {date}
-SignWith: {key_id}
-{md5sums}
-{sha1sums}
-{sha256sums}"""
+        for dist_name, dist in self.dists.items():
+            dist.create_pool_directory()
 
     def start(self):
         """Starts HTTP server and package pool watching. Generates GPG key automatically if it doesn't exist."""
@@ -84,7 +62,7 @@ SignWith: {key_id}
             self.generate_gpg()
 
         self.__generate_connection_guide__()
-        self.update()
+        self.update_all_dists()
 
         server_address = ('', self.port)
         httpd = ThreadedHTTPServer(server_address, lambda *args, **kwargs: AuthHandler(*args, auth=self.conf["auth"],
@@ -142,78 +120,30 @@ SignWith: {key_id}
         else:
             log(f"Already exists. If you want to create a new key, run 'rm -r {self.keyring_dir}'")
 
-    def update(self):
-        with self.update_wait_mutex:
-            if self.queued_update_requests >= 2:
-                log("There are already queued updates. Discarded.")
-                return
-            self.queued_update_requests += 1
-        log("Waiting update lock...")
-        with self.update_mutex:
-            log("Acquired lock.")
-            log("Updating repository...")
-            try:
-                if not self.gpg_key_ok:
-                    self.generate_gpg()
+    def update_dist(self, dist):
+        os.chdir(self.debian_dir)
 
-                out, err, rc = execute_cmd(f"gpg --list-keys --with-colons | grep '^pub' | cut -d: -f5",
-                                           env={'GNUPGHOME': self.keyring_dir})
+        self.dists[dist].update()
 
-                key_id = out.decode("utf-8").strip()
+        os.chdir(self.dir)
 
-                os.chdir(self.debian_dir)
+    def update_all_dists(self):
+        os.chdir(self.debian_dir)
 
-                for dist in os.listdir(self.dists_dir):
-                    for arch in self.conf["architectures"]:
-                        current_dist = os.path.join(self.dists_dir, dist)
-                        pool_path = os.path.join(current_dist, "pool", "stable", arch)
-                        packages_path = os.path.join(current_dist, "stable", f"binary-{arch}")
-                        os.makedirs(packages_path, exist_ok=True)
-                        os.makedirs(pool_path, exist_ok=True)
+        for dist_name, dist in self.dists.items():
+            dist.update()
 
-                        packages_file_path = os.path.join(packages_path, 'Packages')
-                        packages_gz_file_path = os.path.join(packages_path, 'Packages.gz')
-
-                        out, err, rc = execute_cmd(
-                            f"dpkg-scanpackages -m --arch {arch} {os.path.relpath(pool_path, self.debian_dir)} > {packages_file_path}",
-                            env={'GNUPGHOME': self.keyring_dir})
-                        if rc != 0:
-                            log(f"Error while scanning packages: {err.decode('utf-8')}")
-
-                        out, err, rc = execute_cmd(f"gzip -9 -c {packages_file_path} > {packages_gz_file_path}",
-                                                   env={'GNUPGHOME': self.keyring_dir})
-                        if rc != 0:
-                            log(f"Error while zipping package info: {err.decode('utf-8')}")
-
-                        release_file_path = os.path.join(current_dist, "Release")
-                        with open(release_file_path, "w") as f:
-                            f.write(self.__generate_release__(dist, key_id))
-
-                            out, err, rc = execute_cmd(
-                                f"gpg -abs -u {key_id} --yes -o {os.path.join(current_dist, 'Release.gpg')} {release_file_path}",
-                                env={'GNUPGHOME': self.keyring_dir})
-                            out, err, rc = execute_cmd(
-                                f"gpg --clearsign -u {key_id} --yes -o {os.path.join(current_dist, 'InRelease')} {release_file_path}",
-                                env={'GNUPGHOME': self.keyring_dir})
-                os.chdir(self.dir)
-                log("Repository updated.")
-            except Exception as e:
-                log(f"Error during repository update: {e}")
-                with self.update_wait_mutex:
-                    self.queued_update_requests -= 1
-                raise e
-        with self.update_wait_mutex:
-            self.queued_update_requests -= 1
+        os.chdir(self.dir)
 
     def watch_pools(self):
         """Watch package pool directories for any event (file create, delete, modify, move). Calls EventHandler's functions in case of events."""
         from .watcher import Watcher
 
         pool_paths = []
-        for dist in self.dists:
-            pool_paths.append(os.path.join(self.dists_dir, dist, "pool"))
+        for dist_name, dist in self.dists.items():
+            pool_paths.append(dist.pool_dir)
 
-        watcher = Watcher(stop_event=stop_threads, onupdate=self.update, directories=pool_paths)
+        watcher = Watcher(stop_event=stop_threads, onupdate=self.update_dist, directories=pool_paths)
 
         watcher.start()
 
