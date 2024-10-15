@@ -62,17 +62,14 @@ class Distribution:
 
     def __generate_release_files__(self):
         release_file_path = path.join(self.dist_dir, "Release")
-        if not path.exists(release_file_path):
-            with open(release_file_path, "w") as f:
-                f.write(self.__generate_release_content__())
+        with open(release_file_path, "w") as f:
+            f.write(self.__generate_release_content__())
 
         release_gpg_file_path = path.join(self.dist_dir, "Release.gpg")
-        if not path.exists(release_gpg_file_path):
-            generate_release_gpg_file(self.key_id, self.keyring_dir, release_gpg_file_path, release_file_path)
+        generate_release_gpg_file(self.key_id, self.keyring_dir, release_gpg_file_path, release_file_path)
 
         inrelease_file_path = path.join(self.dist_dir, "InRelease")
-        if not path.exists(inrelease_file_path):
-            generate_inrelease_file(self.key_id, self.keyring_dir, inrelease_file_path, release_file_path)
+        generate_inrelease_file(self.key_id, self.keyring_dir, inrelease_file_path, release_file_path)
 
     def __generate_release_content__(self):
         date = datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S +0000")
