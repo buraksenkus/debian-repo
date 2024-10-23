@@ -121,19 +121,11 @@ class DebianRepository:
             log(f"Already exists. If you want to create a new key, run 'rm -r {self.keyring_dir}'")
 
     def update_dist(self, dist):
-        os.chdir(self.debian_dir)
-
         self.dists[dist].update()
 
-        os.chdir(self.dir)
-
     def update_all_dists(self):
-        os.chdir(self.debian_dir)
-
         for dist_name, dist in self.dists.items():
             dist.update()
-
-        os.chdir(self.dir)
 
     def watch_pools(self):
         """Watch package pool directories for any event (file create, delete, modify, move). Calls EventHandler's functions in case of events."""

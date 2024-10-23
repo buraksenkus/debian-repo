@@ -56,7 +56,8 @@ class Distribution:
             makedirs(packages_path, exist_ok=True)
             makedirs(pool_path, exist_ok=True)
 
-            generate_packages_file(self.keyring_dir, path.relpath(pool_path, self.debian_dir), packages_path, arch)
+            generate_packages_file(self.keyring_dir, path.relpath(pool_path, self.debian_dir), packages_path, arch,
+                                   self.debian_dir)
 
             generate_packages_gz_file(self.keyring_dir, packages_path)
 

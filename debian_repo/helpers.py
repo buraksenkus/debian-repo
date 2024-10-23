@@ -20,11 +20,11 @@ def generate_inrelease_file(key_id: str, keyring_dir: str, out_path: str, releas
         log(f"Error while generating {out_path}: {err.decode('utf-8')}")
 
 
-def generate_packages_file(keyring_dir: str, pool_dir: str, packages_folder: str, arch: str):
+def generate_packages_file(keyring_dir: str, pool_dir: str, packages_folder: str, arch: str, deb_dir: str):
     packages_file_path = path.join(packages_folder, 'Packages')
     out, err, rc = execute_cmd(
         f"dpkg-scanpackages -m --arch {arch} {pool_dir} > {packages_file_path}",
-        env={'GNUPGHOME': keyring_dir})
+        env={'GNUPGHOME': keyring_dir}, cwd=deb_dir)
     if rc != 0:
         log(f"Error while scanning packages: {err.decode('utf-8')}")
 
