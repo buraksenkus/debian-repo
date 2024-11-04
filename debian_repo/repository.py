@@ -1,3 +1,4 @@
+from .backup import BackupManager
 from .common import execute_cmd
 from .distribution import Distribution
 from .logger import log
@@ -20,6 +21,18 @@ class DebianRepository:
             self.dists[dist_name] = Distribution(dist_name, dist_dir, config["architectures"], self.keyring_dir,
                                                  self.debian_dir, config["description"])
         self.no_watch = no_watch
+        if "backup" in config and "enable" in config["backup"] and config["backup"]["enable"]:
+            log("Backup enabled.")
+            interval_in_hours = config["backup"]["interval"] if "interval" in config["backup"] else 24
+            copies = config["backup"]["copies"] if "copies" in config["backup"] else 5
+            backup_format = config["backup"]["format"] if "format" in config["backup"] else "zip"
+            self.backup_manager = BackupManager(stop_event=stop_threads, backup_dir=self.dir,
+                                                backup_destination=os.path.join(self.root_dir, "backups"),
+                                                interval_in_hours=interval_in_hours, copies=copies,
+                                                backup_format=backup_format)
+        else:
+            log("Backup disabled.")
+            self.backup_manager = None
 
     @property
     def port(self):
@@ -73,6 +86,10 @@ class DebianRepository:
             if not self.no_watch:
                 watch_thread = Thread(target=self.watch_pools)
                 watch_thread.start()
+
+            if self.backup_manager is not None:
+                backup_thread = Thread(target=self.backup_manager.run)
+                backup_thread.start()
 
             httpd.serve_forever()
         except KeyboardInterrupt:

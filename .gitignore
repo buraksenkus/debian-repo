@@ -10,3 +10,5 @@ __pycache__
 config.json
 CONNECTION_GUIDE.md
 .idea
+
+backups
