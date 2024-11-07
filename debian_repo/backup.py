@@ -69,7 +69,7 @@ class BackupManager:
             need_backup = self.last_backup is None
             if not need_backup:
                 elapsed_seconds = (datetime.datetime.now() - self.last_backup).total_seconds()
-                need_backup = elapsed_seconds >= (self.interval_in_hours * 1 * 1)  # TODO: Multiply with * 60 * 60
+                need_backup = elapsed_seconds >= (self.interval_in_hours * 60 * 60)
             if need_backup:
                 self.last_backup = datetime.datetime.now()
                 self.backup()
