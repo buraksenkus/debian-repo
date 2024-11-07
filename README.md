@@ -8,7 +8,7 @@ This Python program helps to create your own Debian package repository and serve
 * Running as Linux service.
 * Basic HTTP authentication with username and password.
 * Connection guide creation.
-* **SOON:** Backing up existing packages.
+* Backing up repository periodically.
 
 ## Creating & Serving Debian Repository
 
@@ -25,6 +25,12 @@ This Python program helps to create your own Debian package repository and serve
     {
         "architectures": ["amd64", "armhf", "arm64"],
         "dists": ["focal", "jammy", "noble"],
+        "backup": {
+          "enable": true,
+          "format": "zip",
+          "interval": 24,
+          "copies": 5 
+        },
         "short_name": "repo_name",
         "description": "Your repository description",
         "email": "your_email@domain.com",
@@ -40,6 +46,11 @@ This Python program helps to create your own Debian package repository and serve
 
     Available options:
     * **auth**: *basic, none*
+    * **backup**:
+      * **enable**: Enables/disables backup feature. It is false by default.
+      * **format**: Backup format. Can be "zip", "tar" or "both".
+      * **interval**: Backup interval in hours.
+      * **copies**: Keeps last <copies> copies in backup folder. Removes older ones.
 
 * Run repository script by specifying configuration file.
 
