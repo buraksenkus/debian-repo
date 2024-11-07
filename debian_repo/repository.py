@@ -1,6 +1,7 @@
 from .backup import BackupManager
 from .common import execute_cmd
 from .distribution import Distribution
+from .helpers import get_gpg_key_id
 from .logger import log
 from .server import ThreadedHTTPServer, AuthHandler
 
@@ -141,7 +142,9 @@ class DebianRepository:
         self.dists[dist].update()
 
     def update_all_dists(self):
+        key_id = get_gpg_key_id(self.keyring_dir)
         for dist_name, dist in self.dists.items():
+            dist.set_key_id(key_id)
             dist.update()
 
     def watch_pools(self):
