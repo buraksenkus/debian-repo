@@ -1,0 +1,55 @@
+name: Test workflow
+
+on:
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  set-up-env:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install dpkg-dev
+      - name: Set up venv
+        run: |
+          python3 -m venv venv
+          ./venv/bin/python -m pip install --upgrade pip
+          ./venv/bin/pip install pyinotify pyasyncore
+      - name: Upload venv artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: venv-3.12
+          path: venv
+
+  test-repo:
+    runs-on: ubuntu-24.04
+    needs: [ set-up-env ]
+    continue-on-error: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download venv artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: venv-3.12
+          path: venv
+      - name: Create and populate config.json
+        run: |
+          echo '{
+            "architectures": ["amd64", "armhf", "arm64"],
+                "dists": ["jammy", "noble"],
+                "short_name": "test_repo",
+                "description": "Local test repository",
+                "email": "your_email@domain.com",
+                "name": "Admin User",
+                "port": 8645,
+                "auth": "none"
+          }' > config.json
+      - name: Run repo
+        run: |
+          chmod -R +xr venv
+          ./venv/bin/python3 debianrepo -c config.json &
