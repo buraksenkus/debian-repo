@@ -52,6 +52,10 @@ class DebianRepository:
         return os.path.join(self.dir, "debian")
 
     @property
+    def publickey_path(self):
+        return os.path.join(self.dir, "publickey.gpg")
+
+    @property
     def dists_dir(self):
         return os.path.join(self.debian_dir, "dists")
 
@@ -62,6 +66,11 @@ class DebianRepository:
             keys = execute_cmd(f'gpg --list-keys', env={'GNUPGHOME': self.keyring_dir})[0].decode('utf-8')
             return self.conf["email"] in keys
         return False
+
+    @property
+    def public_key_ok(self):
+        """Checks if public key exists."""
+        return os.path.exists(self.publickey_path)
 
     def create_pool_directories(self):
         for dist_name, dist in self.dists.items():
@@ -74,6 +83,9 @@ class DebianRepository:
 
         if not self.gpg_key_ok:
             self.generate_gpg()
+
+        if not self.public_key_ok:
+            self.generate_publickey()
 
         self.__generate_connection_guide__()
         self.update_all_dists()
@@ -128,15 +140,19 @@ class DebianRepository:
             if "fail" in err.decode("utf-8"):
                 raise Exception(err.decode("utf-8"))
 
-            out, err, rc = execute_cmd(
-                f'gpg --armor --export {self.conf["email"]} > {os.path.join(self.dir, "publickey.gpg")}',
-                env={'GNUPGHOME': self.keyring_dir})
-
             if not self.gpg_key_ok:
                 raise Exception("Couldn't generate GPG key!")
 
         else:
             log(f"Already exists. If you want to create a new key, run 'rm -r {self.keyring_dir}'")
+
+    def generate_publickey(self):
+        out, err, rc = execute_cmd(
+            f'gpg --armor --export {self.conf["email"]} > {self.publickey_path}',
+            env={'GNUPGHOME': self.keyring_dir})
+
+        if rc != 0:
+            log(f"Error while generating public key: {err.decode('utf-8')}")
 
     def update_dist(self, dist):
         self.dists[dist].update()
