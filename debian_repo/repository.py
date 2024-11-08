@@ -12,6 +12,17 @@ from typing import Dict
 stop_threads = Event()
 
 
+def run_with_exception_handling(target_fn, stop_threads_event, httpd):
+    try:
+        target_fn()
+    except Exception as e:
+        log(f"Exception in thread: {e}")
+        stop_threads_event.set()
+        httpd.shutdown()
+        httpd.server_close()
+        exit(2)
+
+
 class DebianRepository:
     def __init__(self, config: Dict, repo_dir: str, no_watch=True) -> None:
         self.conf = config
@@ -97,16 +108,17 @@ class DebianRepository:
         log(f"Serving directory '{self.dir}' on port {self.port} ...")
         try:
             if not self.no_watch:
-                watch_thread = Thread(target=self.watch_pools)
+                watch_thread = Thread(target=lambda: run_with_exception_handling(self.watch_pools, stop_threads, httpd))
                 watch_thread.start()
 
             if self.backup_manager is not None:
-                backup_thread = Thread(target=self.backup_manager.run)
+                backup_thread = Thread(
+                    target=lambda: run_with_exception_handling(self.backup_manager.run, stop_threads, httpd))
                 backup_thread.start()
 
             httpd.serve_forever()
         except KeyboardInterrupt:
-            log(f"Requested termination.")
+            log("Requested termination.")
             stop_threads.set()
             httpd.shutdown()
             httpd.server_close()
