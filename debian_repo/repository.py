@@ -1,6 +1,7 @@
 from .backup import BackupManager
 from .common import execute_cmd
 from .distribution import Distribution
+from .helpers import get_gpg_key_id
 from .logger import log
 from .server import ThreadedHTTPServer, AuthHandler
 
@@ -9,6 +10,17 @@ from threading import Event, Thread
 from typing import Dict
 
 stop_threads = Event()
+
+
+def run_with_exception_handling(target_fn, stop_threads_event, httpd):
+    try:
+        target_fn()
+    except Exception as e:
+        log(f"Exception in thread: {e}")
+        stop_threads_event.set()
+        httpd.shutdown()
+        httpd.server_close()
+        exit(2)
 
 
 class DebianRepository:
@@ -51,6 +63,10 @@ class DebianRepository:
         return os.path.join(self.dir, "debian")
 
     @property
+    def publickey_path(self):
+        return os.path.join(self.dir, "publickey.gpg")
+
+    @property
     def dists_dir(self):
         return os.path.join(self.debian_dir, "dists")
 
@@ -61,6 +77,11 @@ class DebianRepository:
             keys = execute_cmd(f'gpg --list-keys', env={'GNUPGHOME': self.keyring_dir})[0].decode('utf-8')
             return self.conf["email"] in keys
         return False
+
+    @property
+    def public_key_ok(self):
+        """Checks if public key exists."""
+        return os.path.exists(self.publickey_path)
 
     def create_pool_directories(self):
         for dist_name, dist in self.dists.items():
@@ -74,6 +95,9 @@ class DebianRepository:
         if not self.gpg_key_ok:
             self.generate_gpg()
 
+        if not self.public_key_ok:
+            self.generate_publickey()
+
         self.__generate_connection_guide__()
         self.update_all_dists()
 
@@ -84,16 +108,17 @@ class DebianRepository:
         log(f"Serving directory '{self.dir}' on port {self.port} ...")
         try:
             if not self.no_watch:
-                watch_thread = Thread(target=self.watch_pools)
+                watch_thread = Thread(target=lambda: run_with_exception_handling(self.watch_pools, stop_threads, httpd))
                 watch_thread.start()
 
             if self.backup_manager is not None:
-                backup_thread = Thread(target=self.backup_manager.run)
+                backup_thread = Thread(
+                    target=lambda: run_with_exception_handling(self.backup_manager.run, stop_threads, httpd))
                 backup_thread.start()
 
             httpd.serve_forever()
         except KeyboardInterrupt:
-            log(f"Requested termination.")
+            log("Requested termination.")
             stop_threads.set()
             httpd.shutdown()
             httpd.server_close()
@@ -127,21 +152,27 @@ class DebianRepository:
             if "fail" in err.decode("utf-8"):
                 raise Exception(err.decode("utf-8"))
 
-            out, err, rc = execute_cmd(
-                f'gpg --armor --export {self.conf["email"]} > {os.path.join(self.dir, "publickey.gpg")}',
-                env={'GNUPGHOME': self.keyring_dir})
-
             if not self.gpg_key_ok:
                 raise Exception("Couldn't generate GPG key!")
 
         else:
             log(f"Already exists. If you want to create a new key, run 'rm -r {self.keyring_dir}'")
 
+    def generate_publickey(self):
+        out, err, rc = execute_cmd(
+            f'gpg --armor --export {self.conf["email"]} > {self.publickey_path}',
+            env={'GNUPGHOME': self.keyring_dir})
+
+        if rc != 0:
+            log(f"Error while generating public key: {err.decode('utf-8')}")
+
     def update_dist(self, dist):
         self.dists[dist].update()
 
     def update_all_dists(self):
+        key_id = get_gpg_key_id(self.keyring_dir)
         for dist_name, dist in self.dists.items():
+            dist.set_key_id(key_id)
             dist.update()
 
     def watch_pools(self):

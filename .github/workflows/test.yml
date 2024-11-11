@@ -1,0 +1,85 @@
+name: Test workflow
+
+on:
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  set-up-env:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+      - name: Set up venv
+        run: |
+          python3 -m venv venv
+          ./venv/bin/python -m pip install --upgrade pip
+          ./venv/bin/pip install pyinotify pyasyncore
+      - name: Upload venv artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: venv-3.12
+          path: venv
+
+  unit-test:
+    runs-on: ubuntu-24.04
+    needs: [ set-up-env ]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download venv artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: venv-3.12
+          path: venv
+      - name: Run unit tests
+        run: |
+          chmod -R +xr venv
+          ./venv/bin/python3 -m unittest
+
+  test-server:
+    runs-on: ubuntu-24.04
+    needs: [ set-up-env ]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download venv artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: venv-3.12
+          path: venv
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install dpkg-dev
+      - name: Create and populate config.json
+        run: |
+          echo '{
+            "architectures": ["amd64", "armhf", "arm64"],
+                "dists": ["jammy", "noble"],
+                "short_name": "test_repo",
+                "description": "Local test repository",
+                "email": "your_email@domain.com",
+                "name": "Admin User",
+                "port": 8645,
+                "auth": "none"
+          }' > config.json
+      - name: Run repo
+        run: |
+          chmod -R +xr venv
+          ./venv/bin/python3 debianrepo -c config.json &
+      - name: Check if repo is running
+        run: lsof -t -i:8645 || exit 1
+      - name: Check if public key created
+        run: test -f repo/publickey.gpg
+      - name: Get public key
+        run: wget -v -O fetched --tries=5 --timeout=3 http://127.0.0.1:8645/publickey.gpg
+      - name: Dearmor
+        run: gpg --dearmor fetched
+      - name: Get public key
+        run: sudo mv fetched.gpg /usr/share/keyrings/local_test.gpg
+      - name: Create repo source list
+        run: echo "deb [arch=amd64, signed-by=/usr/share/keyrings/local_test.gpg] http://127.0.0.1:8645/debian noble stable" | sudo tee /etc/apt/sources.list.d/local_test.list
+      - name: Update repositories
+        run: sudo apt-get update || exit 1
+      - name: Stop repo
+        run: kill $(lsof -t -i:8645)
+

@@ -12,3 +12,5 @@ CONNECTION_GUIDE.md
 .idea
 
 backups
+venv
+.venv

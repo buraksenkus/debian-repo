@@ -4,7 +4,7 @@ from typing import List
 from threading import Lock
 
 from .helpers import generate_packages_file, generate_packages_gz_file, generate_inrelease_file, \
-    generate_release_gpg_file, get_gpg_key_id
+    generate_release_gpg_file
 from .logger import log
 from .ops import do_hash
 
@@ -19,7 +19,7 @@ class Distribution:
         self.keyring_dir = keyring_dir
         self.debian_dir = debian_dir
         self.description = description
-        self.key_id = get_gpg_key_id(self.keyring_dir)
+        self.key_id = None
         self.update_mutex = Lock()
         self.update_wait_mutex = Lock()
         self.queued_update_requests = 0
@@ -27,7 +27,12 @@ class Distribution:
     def create_pool_directory(self):
         makedirs(self.pool_dir, exist_ok=True)
 
+    def set_key_id(self, key_id):
+        self.key_id = key_id
+
     def update(self):
+        if self.key_id is None:
+            raise Exception('No key id provided!')
         with self.update_wait_mutex:
             if self.queued_update_requests >= 2:
                 log(f"There are already queued updates for {self.name} distribution. Discarded.")
