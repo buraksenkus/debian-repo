@@ -8,13 +8,10 @@ jobs:
   set-up-env:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: 3.12
-      - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install dpkg-dev
       - name: Set up venv
         run: |
           python3 -m venv venv
@@ -26,10 +23,9 @@ jobs:
           name: venv-3.12
           path: venv
 
-  test-repo:
+  unit-test:
     runs-on: ubuntu-24.04
     needs: [ set-up-env ]
-    continue-on-error: false
     steps:
       - uses: actions/checkout@v4
       - name: Download venv artifact
@@ -37,6 +33,23 @@ jobs:
         with:
           name: venv-3.12
           path: venv
+      - name: Run unit tests
+        run: |
+          chmod -R +xr venv
+          ./venv/bin/python3 -m unittest
+
+  test-server:
+    runs-on: ubuntu-24.04
+    needs: [ set-up-env ]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download venv artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: venv-3.12
+          path: venv
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install dpkg-dev
       - name: Create and populate config.json
         run: |
           echo '{
