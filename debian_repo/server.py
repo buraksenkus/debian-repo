@@ -1,6 +1,11 @@
 import base64
+from datetime import datetime
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
+
+from .logger import log
+
+unauthorized_access_map = {}
 
 
 class AuthHandler(SimpleHTTPRequestHandler):
@@ -13,35 +18,57 @@ class AuthHandler(SimpleHTTPRequestHandler):
         username, password = credentials.split(':')
         return username in self.users and self.users[username] == password
 
+    @staticmethod
+    def add_to_unauthorized_access_map(client_ip):
+        log(f"Unauthorized access IP: {client_ip}")
+        if client_ip in unauthorized_access_map:
+            unauthorized_access_map[client_ip]["count"] += 1
+        else:
+            unauthorized_access_map[client_ip] = {"count": 1, "first": datetime.now()}
+
+    @staticmethod
+    def check_multiple_unauthorized_access(client_ip):
+        if client_ip in unauthorized_access_map and unauthorized_access_map[client_ip]["count"] >= 5:
+            elapsed_time_from_first = datetime.now() - unauthorized_access_map[client_ip]["first"]
+            if elapsed_time_from_first.total_seconds() >= (
+                    30 * 60):  # Passed 30 mins. Allow 5 failed requests for each 30 mins
+                del unauthorized_access_map[client_ip]
+                return False
+            return True
+
+    def send_unauthorized_response(self, client_ip):
+        self.send_response(401)
+        self.send_header('WWW-Authenticate', 'Basic realm=\"Restricted\"')
+        self.end_headers()
+        self.wfile.write(b'401 Unauthorized - Invalid credentials')
+        self.add_to_unauthorized_access_map(client_ip)
+
     def do_GET(self):
+        client_ip = self.client_address[0]
+
+        if self.check_multiple_unauthorized_access(client_ip):
+            self.send_response(429)
+            self.end_headers()
+            self.wfile.write(b'429 Too Many Requests - Rate limit exceeded')
+            return
+
         if not self.auth.lower() == "basic":
             super().do_GET()
             return
 
-        # Extract the authorization header
         auth_header = self.headers.get('Authorization')
 
-        # Check if the header is present and starts with 'Basic'
-        if auth_header and auth_header.startswith('Basic '):
-            # Decode the base64-encoded credentials
-            credentials = base64.b64decode(auth_header.split(' ')[1]).decode('utf-8')
+        if not auth_header or not auth_header.startswith('Basic '):  # No authorization header
+            self.send_unauthorized_response(client_ip)
 
-            # Check if the credentials match the expected username and password
-            if self.__check_credentials__(credentials):
-                # If authentication is successful, serve the requested file
-                super().do_GET()
-            else:
-                # If authentication fails, return a 401 Unauthorized response
-                self.send_response(401)
-                self.send_header('WWW-Authenticate', 'Basic realm=\"Restricted\"')
-                self.end_headers()
-                self.wfile.write(b'401 Unauthorized - Invalid credentials')
-        else:
-            # If no authorization header is present, return a 401 Unauthorized response
-            self.send_response(401)
-            self.send_header('WWW-Authenticate', 'Basic realm=\"Restricted\"')
-            self.end_headers()
-            self.wfile.write(b'401 Unauthorized - Authentication required')
+        # Decode the base64-encoded credentials
+        credentials = base64.b64decode(auth_header.split(' ')[1]).decode('utf-8')
+
+        # Check if the credentials match the expected username and password
+        if self.__check_credentials__(credentials):  # Authentication success
+            super().do_GET()
+        else:  # Authentication fails
+            self.send_unauthorized_response(client_ip)
 
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
