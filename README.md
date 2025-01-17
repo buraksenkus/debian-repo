@@ -23,24 +23,34 @@ This Python program helps to create your own Debian package repository and serve
 
     ```json
     {
-        "architectures": ["amd64", "armhf", "arm64"],
-        "dists": ["focal", "jammy", "noble"],
-        "backup": {
-          "enable": true,
-          "format": "zip",
-          "interval": 24,
-          "copies": 5 
+      "architectures": ["amd64", "armhf", "arm64"],
+      "dists": {
+        "focal": {
+          "components": ["stable", "test"]
         },
-        "short_name": "repo_name",
-        "description": "Your repository description",
-        "email": "your_email@domain.com",
-        "name": "Your Name",
-        "port": 8645,
-        "auth": "basic",
-        "users": {
-            "username1": "password1",
-            "username2": "password2"
+        "jammy": {
+          "components": ["stable"]
+        },
+        "noble": {
+          "components": ["stable", "test"]
         }
+      },
+      "backup": {
+        "enable": true,
+        "format": "zip",
+        "interval": 24,
+        "copies": 5 
+      },
+      "short_name": "repo_name",
+      "description": "Your repository description",
+      "email": "your_email@domain.com",
+      "name": "Your Name",
+      "port": 8645,
+      "auth": "basic",
+      "users": {
+        "username1": "password1",
+        "username2": "password2"
+      }
     }
     ```
 

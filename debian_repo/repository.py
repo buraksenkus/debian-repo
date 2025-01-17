@@ -28,9 +28,9 @@ class DebianRepository:
         self.conf = config
         self.dir = repo_dir
         self.dists: Dict[str, Distribution] = {}
-        for dist_name in config["dists"]:
+        for dist_name in config["dists"].keys():
             dist_dir = os.path.join(self.dists_dir, dist_name)
-            self.dists[dist_name] = Distribution(dist_name, dist_dir, config["architectures"], self.keyring_dir,
+            self.dists[dist_name] = Distribution(dist_name, dist_dir, config["architectures"], config["dists"][dist_name]["components"], self.keyring_dir,
                                                  self.debian_dir, config["description"])
         self.no_watch = no_watch
         if "backup" in config and "enable" in config["backup"] and config["backup"]["enable"]:
