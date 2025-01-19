@@ -61,6 +61,7 @@ class AuthHandler(SimpleHTTPRequestHandler):
 
         if not auth_header or not auth_header.startswith('Basic '):  # No authorization header
             self.send_unauthorized_response(client_ip)
+            return
 
         # Decode the base64-encoded credentials
         credentials = base64.b64decode(auth_header.split(' ')[1]).decode('utf-8')
