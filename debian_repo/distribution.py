@@ -10,12 +10,13 @@ from .ops import do_hash
 
 
 class Distribution:
-    def __init__(self, name: str, dist_dir: str, architectures: List[str], keyring_dir: str, debian_dir: str,
+    def __init__(self, name: str, dist_dir: str, architectures: List[str], components: List[str], keyring_dir: str, debian_dir: str,
                  description: str):
         self.name = name
         self.dist_dir = dist_dir
         self.pool_dir = path.join(dist_dir, 'pool')
         self.archs = architectures
+        self.components = components
         self.keyring_dir = keyring_dir
         self.debian_dir = debian_dir
         self.description = description
@@ -55,16 +56,17 @@ class Distribution:
             self.queued_update_requests -= 1
 
     def __update_packages__(self):
-        for arch in self.archs:
-            pool_path = path.join(self.pool_dir, "stable", arch)
-            packages_path = path.join(self.dist_dir, "stable", f"binary-{arch}")
-            makedirs(packages_path, exist_ok=True)
-            makedirs(pool_path, exist_ok=True)
+        for component in self.components:
+            for arch in self.archs:
+                pool_path = path.join(self.pool_dir, component, arch)
+                packages_path = path.join(self.dist_dir, component, f"binary-{arch}")
+                makedirs(packages_path, exist_ok=True)
+                makedirs(pool_path, exist_ok=True)
 
-            generate_packages_file(self.keyring_dir, path.relpath(pool_path, self.debian_dir), packages_path, arch,
-                                   self.debian_dir)
+                generate_packages_file(self.keyring_dir, path.relpath(pool_path, self.debian_dir), packages_path, arch,
+                                       self.debian_dir)
 
-            generate_packages_gz_file(self.keyring_dir, packages_path)
+                generate_packages_gz_file(self.keyring_dir, packages_path)
 
     def __generate_release_files__(self):
         release_file_path = path.join(self.dist_dir, "Release")
@@ -87,7 +89,7 @@ Suite: {self.name}
 Codename: {self.name}
 Version: 1.0
 Architectures: {" ".join(self.archs)}
-Components: stable
+Components: {" ".join(self.components)}
 Description: {self.description}
 Date: {date}
 SignWith: {self.key_id}
