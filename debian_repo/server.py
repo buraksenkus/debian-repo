@@ -44,6 +44,11 @@ class AuthHandler(SimpleHTTPRequestHandler):
         self.wfile.write(b'401 Unauthorized - Invalid credentials')
         self.add_to_unauthorized_access_map(client_ip)
 
+    @staticmethod
+    def clear_unauthorized_status_for_client(client_ip):
+        if client_ip in unauthorized_access_map:
+            del unauthorized_access_map[client_ip]
+
     def do_GET(self):
         if not self.auth.lower() == "basic":
             super().do_GET()
@@ -66,6 +71,8 @@ class AuthHandler(SimpleHTTPRequestHandler):
         if not auth_header or not auth_header.startswith('Basic '):  # No authorization header
             self.send_unauthorized_response(client_ip)
             return
+
+        self.clear_unauthorized_status_for_client(client_ip)
 
         # Decode the base64-encoded credentials
         credentials = base64.b64decode(auth_header.split(' ')[1]).decode('utf-8')
