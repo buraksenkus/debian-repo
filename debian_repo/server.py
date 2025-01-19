@@ -45,6 +45,10 @@ class AuthHandler(SimpleHTTPRequestHandler):
         self.add_to_unauthorized_access_map(client_ip)
 
     def do_GET(self):
+        if not self.auth.lower() == "basic":
+            super().do_GET()
+            return
+
         forwarded_for = self.headers.get('X-Forwarded-For')
         if forwarded_for:
             client_ip = forwarded_for.split(',')[0].strip()
@@ -55,10 +59,6 @@ class AuthHandler(SimpleHTTPRequestHandler):
             self.send_response(429)
             self.end_headers()
             self.wfile.write(b'429 Too Many Requests - Rate limit exceeded')
-            return
-
-        if not self.auth.lower() == "basic":
-            super().do_GET()
             return
 
         auth_header = self.headers.get('Authorization')
