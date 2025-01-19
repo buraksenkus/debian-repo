@@ -45,7 +45,11 @@ class AuthHandler(SimpleHTTPRequestHandler):
         self.add_to_unauthorized_access_map(client_ip)
 
     def do_GET(self):
-        client_ip = self.client_address[0]
+        forwarded_for = self.headers.get('X-Forwarded-For')
+        if forwarded_for:
+            client_ip = forwarded_for.split(',')[0].strip()
+        else:
+            client_ip = self.client_address[0]
 
         if self.check_multiple_unauthorized_access(client_ip):
             self.send_response(429)
