@@ -35,6 +35,7 @@ class AuthHandler(SimpleHTTPRequestHandler):
                 del unauthorized_access_map[client_ip]
                 return False
             return True
+        return False
 
     def send_unauthorized_response(self, client_ip):
         self.send_response(401)
