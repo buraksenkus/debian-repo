@@ -3,8 +3,7 @@ import tarfile
 from concurrent.futures import ThreadPoolExecutor
 from glob import glob
 from os import path, makedirs, walk, remove
-from threading import Event
-from time import sleep
+from threading import Event, Timer
 from zipfile import ZipFile, ZIP_DEFLATED
 
 from .logger import log
@@ -25,8 +24,8 @@ class BackupManager:
         self.interval_in_hours = interval_in_hours
         self.copies = copies
         self.backup_format = backup_format
-        self.last_backup = None
         self.executor = ThreadPoolExecutor(max_workers=1)
+        self.timer = None
 
     @staticmethod
     def write_zip_archive(folder_path, zip_file_path):
@@ -65,15 +64,16 @@ class BackupManager:
             except Exception as e:
                 log(f"Failed to remove '{oldest_file}': {e}")
 
-    def run(self):
-        while not self.stop_event.is_set():
-            need_backup = self.last_backup is None
-            if not need_backup:
-                elapsed_seconds = (datetime.datetime.now() - self.last_backup).total_seconds()
-                need_backup = elapsed_seconds >= (self.interval_in_hours * 60 * 60)
-            if need_backup:
-                self.last_backup = datetime.datetime.now()
-                self.executor.submit(self.backup)
-                self.executor.submit(self.remove_old_backups)
+    def _schedule_backup(self):
+        self.executor.submit(self.backup)
+        self.executor.submit(self.remove_old_backups)
 
-            sleep(2)  # Check every 2 seconds
+        if not self.stop_event.is_set():
+            self.timer = Timer(self.interval_in_hours * 60 * 60, self._schedule_backup)
+            self.timer.start()
+
+    def run(self):
+        self._schedule_backup()
+        self.stop_event.wait()
+        if self.timer:
+            self.timer.cancel()
