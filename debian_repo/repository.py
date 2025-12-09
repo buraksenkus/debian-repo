@@ -282,14 +282,12 @@ Available options:
 
 ```shell
 export APT_SERVER_IP="1.1.1.1"
-export APT_DIST=jammy
-export APT_ARCH=amd64
 {credential_vars}
 # Fetch GPG signature
 wget -qO- http://{credentials}$APT_SERVER_IP:{self.port}/publickey.gpg | gpg --dearmor | sudo tee /usr/share/keyrings/{self.conf['short_name']}.gpg >/dev/null
 
 # Fetch repository info
-echo "deb [arch=$APT_ARCH, signed-by=/usr/share/keyrings/{self.conf['short_name']}.gpg] http://$APT_SERVER_IP:{self.port}/debian $APT_DIST stable" | sudo tee /etc/apt/sources.list.d/{self.conf['short_name']}.list
+echo "deb [arch=$(dpkg --print-architecture), signed-by=/usr/share/keyrings/{self.conf['short_name']}.gpg] http://$APT_SERVER_IP:{self.port}/debian $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/{self.conf['short_name']}.list
 {auth_conf_line}
 # Update sources
 sudo apt update
