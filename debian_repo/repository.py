@@ -48,7 +48,7 @@ class DebianRepository:
 
     @property
     def port(self):
-        return int(self.conf["port"])
+        return int(self.conf["http_server"]["port"])
 
     @property
     def root_dir(self):
@@ -102,8 +102,8 @@ class DebianRepository:
         self.update_all_dists()
 
         server_address = ('', self.port)
-        httpd = ThreadedHTTPServer(server_address, lambda *args, **kwargs: AuthHandler(*args, auth=self.conf["auth"],
-                                                                                       users=self.conf["users"],
+        httpd = ThreadedHTTPServer(server_address, lambda *args, **kwargs: AuthHandler(*args, auth=self.conf["http_server"]["auth"],
+                                                                                       users=self.conf["http_server"]["users"],
                                                                                        **kwargs))
         log(f"Serving directory '{self.dir}' on port {self.port} ...")
         try:
@@ -195,7 +195,7 @@ Description={self.conf['description']}
 
 [Service]
 WorkingDirectory={self.root_dir}
-ExecStart=python3 debianrepo -c {os.path.realpath(config_path)}
+ExecStart=debianrepo -c {os.path.realpath(config_path)}
 
 [Install]
 WantedBy=multi-user.target
@@ -248,7 +248,7 @@ WantedBy=multi-user.target
         credentials = ""
         credential_vars = ""
         auth_conf_line = ""
-        if "auth" in self.conf and self.conf["auth"].lower() == "basic":
+        if "auth" in self.conf["http_server"] and self.conf["http_server"]["auth"].lower() == "basic":
             credentials = "$APT_USERNAME:$APT_PASSWORD@"
             credential_vars = "export APT_USERNAME=username\nexport APT_PASSWORD=password\n"
             auth_conf_line = f"\necho \"machine http://$APT_SERVER_IP:{self.port} login $APT_USERNAME password $APT_PASSWORD\" | sudo tee /etc/apt/auth.conf.d/{self.conf['short_name']}.conf\n"
