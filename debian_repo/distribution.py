@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from .helpers import generate_packages_file, generate_packages_gz_file, generate_inrelease_file, \
     generate_release_gpg_file
 from .logger import log
-from .ops import calculate_hashes
+from .ops import do_hash
 
 
 class Distribution:
@@ -90,7 +90,9 @@ class Distribution:
 
     def __generate_release_content__(self):
         date = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S +0000")
-        md5sums, sha1sums, sha256sums = calculate_hashes(self.dist_dir)
+        md5sums = do_hash("MD5Sum", "md5sum", self.dist_dir)
+        sha1sums = do_hash("SHA1", "sha1sum", self.dist_dir)
+        sha256sums = do_hash("SHA256", "sha256sum", self.dist_dir)
         return f"""Origin: {self.description}
 Suite: {self.name}
 Codename: {self.name}

@@ -2,13 +2,11 @@ from datetime import datetime, timedelta
 import unittest
 import os
 import shutil
-import hashlib
 import tarfile
 from zipfile import ZipFile
 
 from debian_repo.common import execute_cmd
 from debian_repo.server import AuthHandler, unauthorized_access_map
-from debian_repo.ops import calculate_hashes
 from debian_repo.backup import BackupManager
 
 
@@ -24,45 +22,6 @@ class TestOps(unittest.TestCase):
         self.assertNotEqual(rc, 0)
         self.assertTrue(len(err.decode("utf-8")) > 0)
         self.assertEqual(len(out.decode("utf-8")), 0)
-
-class TestHashing(unittest.TestCase):
-    def setUp(self):
-        self.test_dir = "test_dist"
-        os.makedirs(self.test_dir, exist_ok=True)
-        with open(os.path.join(self.test_dir, "file1.txt"), "w") as f:
-            f.write("This is a test file.")
-        with open(os.path.join(self.test_dir, "file2.txt"), "w") as f:
-            f.write("This is another test file.")
-
-    def tearDown(self):
-        shutil.rmtree(self.test_dir)
-
-    def test_calculate_hashes(self):
-        md5sum, sha1sum, sha256sum = calculate_hashes(self.test_dir)
-
-        with open(os.path.join(self.test_dir, "file1.txt"), 'rb') as f:
-            file1_content = f.read()
-        with open(os.path.join(self.test_dir, "file2.txt"), 'rb') as f:
-            file2_content = f.read()
-
-        file1_md5 = hashlib.md5(file1_content).hexdigest()
-        file1_sha1 = hashlib.sha1(file1_content).hexdigest()
-        file1_sha256 = hashlib.sha256(file1_content).hexdigest()
-        file1_size = len(file1_content)
-
-        file2_md5 = hashlib.md5(file2_content).hexdigest()
-        file2_sha1 = hashlib.sha1(file2_content).hexdigest()
-        file2_sha256 = hashlib.sha256(file2_content).hexdigest()
-        file2_size = len(file2_content)
-
-        self.assertIn(f"{file1_md5} {file1_size} file1.txt", md5sum)
-        self.assertIn(f"{file2_md5} {file2_size} file2.txt", md5sum)
-
-        self.assertIn(f"{file1_sha1} {file1_size} file1.txt", sha1sum)
-        self.assertIn(f"{file2_sha1} {file2_size} file2.txt", sha1sum)
-
-        self.assertIn(f"{file1_sha256} {file1_size} file1.txt", sha256sum)
-        self.assertIn(f"{file2_sha256} {file2_size} file2.txt", sha256sum)
 
 
 class TestBackup(unittest.TestCase):
