@@ -104,9 +104,10 @@ class DebianRepository:
         self.update_all_dists()
 
         server_address = ('', self.port)
-        httpd = ThreadedHTTPServer(server_address, lambda *args, **kwargs: AuthHandler(*args, auth=self.conf["http_server"]["auth"],
-                                                                                       users=self.conf["http_server"]["users"],
-                                                                                       **kwargs))
+        httpd = ThreadedHTTPServer(server_address,
+                                   lambda *args, **kwargs: AuthHandler(*args, auth=self.conf["http_server"]["auth"],
+                                                                       users=self.conf["http_server"]["users"],
+                                                                       **kwargs))
         log(f"Serving directory '{self.dir}' on port {self.port} ...")
         try:
             if not self.no_watch:
@@ -148,7 +149,7 @@ class DebianRepository:
             ])
 
             out, err, rc = execute_cmd(
-                f'echo "{cmd_input}" | gpg --full-gen-key --batch --yes',
+                f'gpgconf --kill gpg-agent && echo "{cmd_input}" | gpg --full-gen-key --batch --yes',
                 env={'GNUPGHOME': self.keyring_dir})
 
             if "fail" in err.decode("utf-8"):
@@ -156,8 +157,6 @@ class DebianRepository:
 
             if not self.gpg_key_ok:
                 raise Exception("Couldn't generate GPG key!")
-
-            execute_cmd('gpgconf --kill gpg-agent', env={'GNUPGHOME': self.keyring_dir})
 
         else:
             log(f"Already exists. If you want to create a new key, run 'rm -r {self.keyring_dir}'")
@@ -215,22 +214,17 @@ WantedBy=multi-user.target
         with open(service_file_path, "w") as f:
             f.write(service_file_content)
 
-        commands = [
-            "systemctl daemon-reload",
-            f"systemctl enable {self.conf['short_name']}.service",
-            f"systemctl start {self.conf['short_name']}.service"
-        ]
+        out, err, rc = execute_cmd("systemctl daemon-reload")
+        if rc != 0:
+            log(f"Error while reloading systemctl services: {err.decode('utf-8')}")
 
-        with ThreadPoolExecutor() as executor:
-            futures = {executor.submit(execute_cmd, cmd): cmd for cmd in commands}
-            for future in as_completed(futures):
-                cmd = futures[future]
-                try:
-                    out, err, rc = future.result()
-                    if rc != 0:
-                        log(f"Error while executing '{cmd}': {err.decode('utf-8')}")
-                except Exception as exc:
-                    log(f'{cmd} generated an exception: {exc}')
+        out, err, rc = execute_cmd(f"systemctl enable {self.conf['short_name']}.service")
+        if rc != 0:
+            log(f"Error while enabling {self.conf['short_name']}.service: {err.decode('utf-8')}")
+
+        out, err, rc = execute_cmd(f"systemctl start {self.conf['short_name']}.service")
+        if rc != 0:
+            log(f"Error while starting {self.conf['short_name']}.service: {err.decode('utf-8')}")
 
         log("Done.")
 
@@ -243,22 +237,17 @@ WantedBy=multi-user.target
 
         log("Removing systemd service...")
 
-        commands = [
-            f"systemctl stop {self.conf['short_name']}.service",
-            f"systemctl disable {self.conf['short_name']}.service",
-            "systemctl daemon-reload"
-        ]
+        out, err, rc = execute_cmd(f"systemctl stop {self.conf['short_name']}.service")
+        if rc != 0:
+            log(f"Error while starting {self.conf['short_name']}.service: {err.decode('utf-8')}")
 
-        with ThreadPoolExecutor() as executor:
-            futures = {executor.submit(execute_cmd, cmd): cmd for cmd in commands}
-            for future in as_completed(futures):
-                cmd = futures[future]
-                try:
-                    out, err, rc = future.result()
-                    if rc != 0:
-                        log(f"Error while executing '{cmd}': {err.decode('utf-8')}")
-                except Exception as exc:
-                    log(f'{cmd} generated an exception: {exc}')
+        out, err, rc = execute_cmd(f"systemctl disable {self.conf['short_name']}.service")
+        if rc != 0:
+            log(f"Error while enabling {self.conf['short_name']}.service: {err.decode('utf-8')}")
+
+        out, err, rc = execute_cmd("systemctl daemon-reload")
+        if rc != 0:
+            log(f"Error while reloading systemctl services: {err.decode('utf-8')}")
 
         os.remove(service_file_path)
 
