@@ -6,6 +6,7 @@ from .logger import log
 from .server import ThreadedHTTPServer, AuthHandler
 
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Event, Thread
 from typing import Dict
 
@@ -30,7 +31,8 @@ class DebianRepository:
         self.dists: Dict[str, Distribution] = {}
         for dist_name in config["dists"].keys():
             dist_dir = os.path.join(self.dists_dir, dist_name)
-            self.dists[dist_name] = Distribution(dist_name, dist_dir, config["architectures"], config["dists"][dist_name]["components"], self.keyring_dir,
+            self.dists[dist_name] = Distribution(dist_name, dist_dir, config["architectures"],
+                                                 config["dists"][dist_name]["components"], self.keyring_dir,
                                                  self.debian_dir, config["description"])
         self.no_watch = no_watch
         if "backup" in config and "enable" in config["backup"] and config["backup"]["enable"]:
@@ -48,7 +50,7 @@ class DebianRepository:
 
     @property
     def port(self):
-        return int(self.conf["port"])
+        return int(self.conf["http_server"]["port"])
 
     @property
     def root_dir(self):
@@ -84,8 +86,8 @@ class DebianRepository:
         return os.path.exists(self.publickey_path)
 
     def create_pool_directories(self):
-        for dist_name, dist in self.dists.items():
-            dist.create_pool_directory()
+        with ThreadPoolExecutor() as executor:
+            list(executor.map(lambda dist: dist.create_pool_directory(), self.dists.values()))
 
     def start(self):
         """Starts HTTP server and package pool watching. Generates GPG key automatically if it doesn't exist."""
@@ -102,8 +104,8 @@ class DebianRepository:
         self.update_all_dists()
 
         server_address = ('', self.port)
-        httpd = ThreadedHTTPServer(server_address, lambda *args, **kwargs: AuthHandler(*args, auth=self.conf["auth"],
-                                                                                       users=self.conf["users"],
+        httpd = ThreadedHTTPServer(server_address, lambda *args, **kwargs: AuthHandler(*args, auth=self.conf["http_server"]["auth"],
+                                                                                       users=self.conf["http_server"]["users"],
                                                                                        **kwargs))
         log(f"Serving directory '{self.dir}' on port {self.port} ...")
         try:
@@ -146,7 +148,7 @@ class DebianRepository:
             ])
 
             out, err, rc = execute_cmd(
-                f'gpgconf --kill gpg-agent && echo "{cmd_input}" | gpg --full-gen-key --batch --yes',
+                f'echo "{cmd_input}" | gpg --full-gen-key --batch --yes',
                 env={'GNUPGHOME': self.keyring_dir})
 
             if "fail" in err.decode("utf-8"):
@@ -154,6 +156,8 @@ class DebianRepository:
 
             if not self.gpg_key_ok:
                 raise Exception("Couldn't generate GPG key!")
+
+            execute_cmd('gpgconf --kill gpg-agent', env={'GNUPGHOME': self.keyring_dir})
 
         else:
             log(f"Already exists. If you want to create a new key, run 'rm -r {self.keyring_dir}'")
@@ -171,9 +175,16 @@ class DebianRepository:
 
     def update_all_dists(self):
         key_id = get_gpg_key_id(self.keyring_dir)
-        for dist_name, dist in self.dists.items():
+        for dist in self.dists.values():
             dist.set_key_id(key_id)
-            dist.update()
+        with ThreadPoolExecutor() as executor:
+            futures = {executor.submit(dist.update): dist for dist in self.dists.values()}
+            for future in as_completed(futures):
+                dist = futures[future]
+                try:
+                    future.result()
+                except Exception as exc:
+                    log(f'{dist} generated an exception: {exc}')
 
     def watch_pools(self):
         """Watch package pool directories for any event (file create, delete, modify, move). Calls EventHandler's functions in case of events."""
@@ -195,7 +206,7 @@ Description={self.conf['description']}
 
 [Service]
 WorkingDirectory={self.root_dir}
-ExecStart=python3 debianrepo -c {os.path.realpath(config_path)}
+ExecStart=debianrepo -c {os.path.realpath(config_path)}
 
 [Install]
 WantedBy=multi-user.target
@@ -204,17 +215,22 @@ WantedBy=multi-user.target
         with open(service_file_path, "w") as f:
             f.write(service_file_content)
 
-        out, err, rc = execute_cmd("systemctl daemon-reload")
-        if rc != 0:
-            log(f"Error while reloading systemctl services: {err.decode('utf-8')}")
+        commands = [
+            "systemctl daemon-reload",
+            f"systemctl enable {self.conf['short_name']}.service",
+            f"systemctl start {self.conf['short_name']}.service"
+        ]
 
-        out, err, rc = execute_cmd(f"systemctl enable {self.conf['short_name']}.service")
-        if rc != 0:
-            log(f"Error while enabling {self.conf['short_name']}.service: {err.decode('utf-8')}")
-
-        out, err, rc = execute_cmd(f"systemctl start {self.conf['short_name']}.service")
-        if rc != 0:
-            log(f"Error while starting {self.conf['short_name']}.service: {err.decode('utf-8')}")
+        with ThreadPoolExecutor() as executor:
+            futures = {executor.submit(execute_cmd, cmd): cmd for cmd in commands}
+            for future in as_completed(futures):
+                cmd = futures[future]
+                try:
+                    out, err, rc = future.result()
+                    if rc != 0:
+                        log(f"Error while executing '{cmd}': {err.decode('utf-8')}")
+                except Exception as exc:
+                    log(f'{cmd} generated an exception: {exc}')
 
         log("Done.")
 
@@ -227,17 +243,22 @@ WantedBy=multi-user.target
 
         log("Removing systemd service...")
 
-        out, err, rc = execute_cmd(f"systemctl stop {self.conf['short_name']}.service")
-        if rc != 0:
-            log(f"Error while starting {self.conf['short_name']}.service: {err.decode('utf-8')}")
+        commands = [
+            f"systemctl stop {self.conf['short_name']}.service",
+            f"systemctl disable {self.conf['short_name']}.service",
+            "systemctl daemon-reload"
+        ]
 
-        out, err, rc = execute_cmd(f"systemctl disable {self.conf['short_name']}.service")
-        if rc != 0:
-            log(f"Error while enabling {self.conf['short_name']}.service: {err.decode('utf-8')}")
-
-        out, err, rc = execute_cmd("systemctl daemon-reload")
-        if rc != 0:
-            log(f"Error while reloading systemctl services: {err.decode('utf-8')}")
+        with ThreadPoolExecutor() as executor:
+            futures = {executor.submit(execute_cmd, cmd): cmd for cmd in commands}
+            for future in as_completed(futures):
+                cmd = futures[future]
+                try:
+                    out, err, rc = future.result()
+                    if rc != 0:
+                        log(f"Error while executing '{cmd}': {err.decode('utf-8')}")
+                except Exception as exc:
+                    log(f'{cmd} generated an exception: {exc}')
 
         os.remove(service_file_path)
 
@@ -248,7 +269,7 @@ WantedBy=multi-user.target
         credentials = ""
         credential_vars = ""
         auth_conf_line = ""
-        if "auth" in self.conf and self.conf["auth"].lower() == "basic":
+        if "auth" in self.conf["http_server"] and self.conf["http_server"]["auth"].lower() == "basic":
             credentials = "$APT_USERNAME:$APT_PASSWORD@"
             credential_vars = "export APT_USERNAME=username\nexport APT_PASSWORD=password\n"
             auth_conf_line = f"\necho \"machine http://$APT_SERVER_IP:{self.port} login $APT_USERNAME password $APT_PASSWORD\" | sudo tee /etc/apt/auth.conf.d/{self.conf['short_name']}.conf\n"
@@ -261,14 +282,12 @@ Available options:
 
 ```shell
 export APT_SERVER_IP="1.1.1.1"
-export APT_DIST=jammy
-export APT_ARCH=amd64
 {credential_vars}
 # Fetch GPG signature
 wget -qO- http://{credentials}$APT_SERVER_IP:{self.port}/publickey.gpg | gpg --dearmor | sudo tee /usr/share/keyrings/{self.conf['short_name']}.gpg >/dev/null
 
 # Fetch repository info
-echo "deb [arch=$APT_ARCH, signed-by=/usr/share/keyrings/{self.conf['short_name']}.gpg] http://$APT_SERVER_IP:{self.port}/debian $APT_DIST stable" | sudo tee /etc/apt/sources.list.d/{self.conf['short_name']}.list
+echo "deb [arch=$(dpkg --print-architecture), signed-by=/usr/share/keyrings/{self.conf['short_name']}.gpg] http://$APT_SERVER_IP:{self.port}/debian $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/{self.conf['short_name']}.list
 {auth_conf_line}
 # Update sources
 sudo apt update

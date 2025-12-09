@@ -1,0 +1,42 @@
+{
+  "architectures": [
+    "amd64",
+    "armhf",
+    "arm64"
+  ],
+  "dists": {
+    "focal": {
+      "components": [
+        "stable",
+        "updates"
+      ]
+    },
+    "jammy": {
+      "components": [
+        "stable"
+      ]
+    },
+    "noble": {
+      "components": [
+        "stable"
+      ]
+    }
+  },
+  "backup": {
+    "enable": true,
+    "format": "tar",
+    "interval": 24,
+    "copies": 4
+  },
+  "short_name": "local_test",
+  "description": "Local test repository",
+  "email": "your_email@domain.com",
+  "name": "Username Usersurname",
+  "http_server": {
+    "port": 8645,
+    "auth": "basic",
+    "users": {
+      "user1": "user1password"
+    }
+  }
+}
