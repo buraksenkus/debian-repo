@@ -33,13 +33,17 @@ class BackupManager:
             for root, dirs, files in walk(folder_path):
                 for file in files:
                     file_path = path.join(root, file)
-                    arcname = path.relpath(str(file_path), path.dirname(folder_path))
+                    arcname = path.relpath(str(file_path), folder_path)
                     zipf.write(str(file_path), arcname)
 
     @staticmethod
     def write_tar_archive(folder_path, tar_file_path):
         with tarfile.open(tar_file_path, "w:gz") as tar:
-            tar.add(folder_path, arcname=path.basename(folder_path))
+            for root, dirs, files in walk(folder_path):
+                for file in files:
+                    file_path = path.join(root, file)
+                    arcname = path.relpath(file_path, folder_path)
+                    tar.add(file_path, arcname=arcname)
 
     def backup(self):
         if self.backup_format == "zip" or self.backup_format == "both":
