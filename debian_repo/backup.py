@@ -1,6 +1,6 @@
 import datetime
 import tarfile
-
+from concurrent.futures import ThreadPoolExecutor
 from glob import glob
 from os import path, makedirs, walk, remove
 from threading import Event
@@ -26,6 +26,7 @@ class BackupManager:
         self.copies = copies
         self.backup_format = backup_format
         self.last_backup = None
+        self.executor = ThreadPoolExecutor(max_workers=1)
 
     @staticmethod
     def write_zip_archive(folder_path, zip_file_path):
@@ -72,7 +73,7 @@ class BackupManager:
                 need_backup = elapsed_seconds >= (self.interval_in_hours * 60 * 60)
             if need_backup:
                 self.last_backup = datetime.datetime.now()
-                self.backup()
-                self.remove_old_backups()
+                self.executor.submit(self.backup)
+                self.executor.submit(self.remove_old_backups)
 
             sleep(2)  # Check every 2 seconds
